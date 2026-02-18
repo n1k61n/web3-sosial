@@ -1,4 +1,4 @@
-# Web3 Social Media Platform
+# BlockBuzz
 
 This is a web3 social media platform built with a microservices architecture. The backend is built with Java and Spring Boot, and the frontend is a single-page application built with React.
 
