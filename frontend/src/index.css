@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0a0a0f;
+    color: #e2e8f0;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0a0a0f;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1e1e2e;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #00ff88;
+  }
+}
+
+@layer components {
+  .cyber-card {
+    @apply bg-[#111118] border border-[#1e1e2e] rounded-xl;
+  }
+
+  .cyber-btn {
+    @apply bg-[#00ff88] text-[#0a0a0f] font-display font-bold px-6 py-2 rounded-lg 
+           hover:shadow-[0_0_20px_#00ff88] transition-all duration-300 text-sm;
+  }
+
+  .cyber-btn-outline {
+    @apply border border-[#00ff88] text-[#00ff88] font-display px-6 py-2 rounded-lg 
+           hover:bg-[#00ff88] hover:text-[#0a0a0f] transition-all duration-300 text-sm;
+  }
+
+  .cyber-input {
+    @apply bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-3 text-[#e2e8f0] 
+           focus:outline-none focus:border-[#00ff88] transition-colors w-full font-body;
+  }
+
+  .glow-text {
+    @apply text-[#00ff88] drop-shadow-[0_0_10px_#00ff88];
+  }
+}
