@@ -1,6 +1,10 @@
 services:
+  # ==================== INFRASTRUCTURE ====================
+  
+  # Apache Kafka - Message Broker
   kafka:
     image: confluentinc/cp-kafka:latest
+    container_name: w3social-kafka
     ports:
       - "9092:9092"
     environment:
@@ -14,21 +18,39 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - w3social-network
 
+  # PostgreSQL - Database
   postgres:
     image: postgres:15
+    container_name: w3social-postgres
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 12345
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-12345}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - w3social-network
 
-  # Local Ethereum Blockchain (Ganache)
+  # Ganache - Local Ethereum Blockchain
   ganache:
     image: trufflesuite/ganache:latest
+    container_name: w3social-ganache
     ports:
       - "8545:8545"
     command: >
@@ -37,15 +59,21 @@ services:
       --gasPrice 20000000000
       --hardfork istanbul
       --wallet.seed web3social
+      --chain.chainId 1337
+      --chain.networkId 1337
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8545 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - w3social-network
 
-  # IPFS Node
+  # IPFS - Decentralized Storage
   ipfs:
     image: ipfs/kubo:latest
+    container_name: w3social-ipfs
     ports:
       - "4001:4001"
       - "5001:5001"
@@ -54,90 +82,238 @@ services:
       - ipfs_data:/data/ipfs
     environment:
       IPFS_PROFILE: test
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - w3social-network
 
+  # ==================== BACKEND SERVICES ====================
+
+  # Eureka Server - Service Discovery
   eureka-server:
-    build: ./backend/eureka-server
+    build:
+      context: ./backend/eureka-server
+      dockerfile: Dockerfile
+    container_name: w3social-eureka
     ports:
       - "8761:8761"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8761/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
 
-  auth-service:
-    build: ./backend/auth-service
-    ports:
-      - "8081:8081"
-    depends_on:
-      - postgres
-      - eureka-server
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-
-  user-service:
-    build: ./backend/user-service
-    ports:
-      - "8082:8082"
-    depends_on:
-      - postgres
-      - eureka-server
-      - kafka
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-
-  post-service:
-    build: ./backend/post-service
-    ports:
-      - "8083:8083"
-    depends_on:
-      - postgres
-      - eureka-server
-      - kafka
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/post_db
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-
-  notification-service:
-    build: ./backend/notification-service
-    ports:
-      - "8084:8084"
-    depends_on:
-      - postgres
-      - eureka-server
-      - kafka
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-
-  # New Blockchain Service
-  blockchain-service:
-    build: ./backend/blockchain-service
-    ports:
-      - "8085:8085"
-    depends_on:
-      - eureka-server
-      - kafka
-      - ganache
-      - ipfs
-    environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      WEB3J_CLIENT_ADDRESS: http://ganache:8545
-      IPFS_API_ADDRESS: /ip4/ipfs/tcp/5001
-      IPFS_GATEWAY_URL: http://ipfs:8080/ipfs/
-
+  # Gateway Service - API Gateway
   gateway-service:
-    build: ./backend/gateway-service
+    build:
+      context: ./backend/gateway-service
+      dockerfile: Dockerfile
+    container_name: w3social-gateway
     ports:
       - "8080:8080"
     depends_on:
-      - eureka-server
+      eureka-server:
+        condition: service_healthy
     environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
 
+  # Auth Service - Authentication
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: w3social-auth
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-12345}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
+
+  # User Service - User Management
+  user-service:
+    build:
+      context: ./backend/user-service
+      dockerfile: Dockerfile
+    container_name: w3social-user
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-12345}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8082/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
+
+  # Post Service - Post Management
+  post-service:
+    build:
+      context: ./backend/post-service
+      dockerfile: Dockerfile
+    container_name: w3social-post
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/post_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-12345}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
+
+  # Notification Service - Notifications
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: w3social-notification
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-12345}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8084/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
+
+  # Blockchain Service - Web3 Integration
+  blockchain-service:
+    build:
+      context: ./backend/blockchain-service
+      dockerfile: Dockerfile
+    container_name: w3social-blockchain
+    ports:
+      - "8085:8085"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      ganache:
+        condition: service_healthy
+      ipfs:
+        condition: service_healthy
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_SERVER:-http://eureka-server:8761/eureka/}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      WEB3J_CLIENT_ADDRESS: http://ganache:8545
+      IPFS_API_ADDRESS: /ip4/ipfs/tcp/5001
+      IPFS_GATEWAY_URL: ${IPFS_GATEWAY_URL:-http://ipfs:8080/ipfs/}
+      BLOCKCHAIN_PRIVATE_KEY: ${BLOCKCHAIN_PRIVATE_KEY:-}
+      BLOCKCHAIN_GAS_PRICE: ${BLOCKCHAIN_GAS_PRICE:-20000000000}
+      BLOCKCHAIN_GAS_LIMIT: ${BLOCKCHAIN_GAS_LIMIT:-4000000}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8085/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - w3social-network
+
+  # Frontend - React UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: w3social-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway-service
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - w3social-network
+
+# ==================== VOLUMES ====================
 volumes:
   postgres_data:
+    driver: local
   ipfs_data:
+    driver: local
+
+# ==================== NETWORKS ====================
+networks:
+  w3social-network:
+    driver: bridge

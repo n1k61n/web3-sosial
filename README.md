@@ -2,6 +2,28 @@
 
 A fully **blockchain-based** social networking platform with token rewards, decentralized storage, and Web3 authentication.
 
+## 🚀 Quick Start
+
+### Windows
+
+```bash
+# Just double-click start.bat
+start.bat
+```
+
+### Linux/Mac
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+That's it! All services will start automatically. Access the app at **http://localhost:5173**
+
+For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md).
+
+---
+
 ## CI/CD Status
 
 [![Backend CI](https://github.com/mamedov/web3-sosial/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/mamedov/web3-sosial/actions/workflows/backend-ci.yml)
