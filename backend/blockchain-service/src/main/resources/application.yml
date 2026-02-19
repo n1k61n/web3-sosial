@@ -1,0 +1,46 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: blockchain-service
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: blockchain-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+web3j:
+  client-address: ${WEB3J_CLIENT_ADDRESS:http://localhost:8545}
+  network: ${WEB3J_NETWORK:localhost}
+
+blockchain:
+  contract:
+    token-address: ${TOKEN_CONTRACT_ADDRESS:0x0000000000000000000000000000000000000000}
+    platform-address: ${PLATFORM_CONTRACT_ADDRESS:0x0000000000000000000000000000000000000000}
+  private-key: ${BLOCKCHAIN_PRIVATE_KEY:}
+  gas-price: ${BLOCKCHAIN_GAS_PRICE:20000000000}
+  gas-limit: ${BLOCKCHAIN_GAS_LIMIT:4000000}
+
+ipfs:
+  api-address: ${IPFS_API_ADDRESS:/ip4/127.0.0.1/tcp/5001}
+  gateway-url: ${IPFS_GATEWAY_URL:http://localhost:8080/ipfs/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

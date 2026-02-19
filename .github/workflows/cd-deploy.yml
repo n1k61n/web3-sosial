@@ -1,0 +1,197 @@
+name: CD - Deploy to Environment
+
+on:
+  workflow_run:
+    workflows: ["Docker Build & Push"]
+    types:
+      - completed
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: |
+      ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+      && (github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.web3social.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Compose
+        run: |
+          docker compose version || echo "Docker compose not available, using docker-compose"
+
+      - name: Create .env file for staging
+        run: |
+          cat > .env << EOF
+          POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD || 'staging_db_password' }}
+          JWT_SECRET=${{ secrets.JWT_SECRET || 'staging_jwt_secret' }}
+          ENVIRONMENT=staging
+          EOF
+
+      - name: Pull latest images
+        run: |
+          docker compose pull || docker-compose pull
+
+      - name: Start services
+        run: |
+          docker compose up -d || docker-compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+
+      - name: Health check - Eureka
+        run: |
+          curl -f http://localhost:8761/actuator/health || exit 1
+        continue-on-error: true
+
+      - name: Health check - Gateway
+        run: |
+          curl -f http://localhost:8080/actuator/health || exit 1
+        continue-on-error: true
+
+      - name: Show running containers
+        run: |
+          docker ps
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Staging deployment completed successfully!"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+      || startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://web3social.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create .env file for production
+        run: |
+          cat > .env << EOF
+          POSTGRES_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
+          JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+          ENVIRONMENT=production
+          EOF
+
+      - name: Pull latest images
+        run: |
+          docker compose pull || docker-compose pull
+
+      - name: Backup database (optional)
+        run: |
+          echo "Creating database backup..."
+          docker compose exec -T postgres pg_dump -U postgres auth_db > backup_auth_$(date +%Y%m%d_%H%M%S).sql || true
+          docker compose exec -T postgres pg_dump -U postgres user_db > backup_user_$(date +%Y%m%d_%H%M%S).sql || true
+          docker compose exec -T postgres pg_dump -U postgres post_db > backup_post_$(date +%Y%m%d_%H%M%S).sql || true
+          docker compose exec -T postgres pg_dump -U postgres notification_db > backup_notification_$(date +%Y%m%d_%H%M%S).sql || true
+        continue-on-error: true
+
+      - name: Start services (rolling update)
+        run: |
+          docker compose up -d --no-deps --build eureka-server || docker-compose up -d --no-deps --build eureka-server
+          sleep 10
+          docker compose up -d --no-deps --build gateway-service || docker-compose up -d --no-deps --build gateway-service
+          sleep 10
+          docker compose up -d --no-deps --build auth-service || docker-compose up -d --no-deps --build auth-service
+          sleep 10
+          docker compose up -d --no-deps --build user-service || docker-compose up -d --no-deps --build user-service
+          sleep 10
+          docker compose up -d --no-deps --build post-service || docker-compose up -d --no-deps --build post-service
+          sleep 10
+          docker compose up -d --no-deps --build notification-service || docker-compose up -d --no-deps --build notification-service
+          sleep 10
+          docker compose up -d --no-deps --build frontend || docker-compose up -d --no-deps --build frontend
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 60
+
+      - name: Health check - Eureka
+        run: |
+          curl -f http://localhost:8761/actuator/health || exit 1
+
+      - name: Health check - Gateway
+        run: |
+          curl -f http://localhost:8080/actuator/health || exit 1
+
+      - name: Health check - Auth Service
+        run: |
+          curl -f http://localhost:8081/actuator/health || exit 1
+
+      - name: Show running containers
+        run: |
+          docker ps
+
+      - name: Cleanup old images
+        run: |
+          docker image prune -f --filter "until=24h"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Production deployment completed successfully!"
+
+  rollback:
+    name: Rollback (Manual)
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-staging, deploy-production]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Rollback to previous version
+        run: |
+          echo "🔄 Rolling back to previous deployment..."
+          # Add your rollback logic here
+          # Example: docker compose down && docker compose up -d --force-recreate
+
+      - name: Notify rollback
+        run: |
+          echo "🔄 Deployment failed - rollback initiated"

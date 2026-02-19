@@ -26,6 +26,35 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  # Local Ethereum Blockchain (Ganache)
+  ganache:
+    image: trufflesuite/ganache:latest
+    ports:
+      - "8545:8545"
+    command: >
+      --defaultBalance 1000
+      --gasLimit 10000000
+      --gasPrice 20000000000
+      --hardfork istanbul
+      --wallet.seed web3social
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8545 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # IPFS Node
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8081:8080"
+    volumes:
+      - ipfs_data:/data/ipfs
+    environment:
+      IPFS_PROFILE: test
+
   eureka-server:
     build: ./backend/eureka-server
     ports:
@@ -83,6 +112,23 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
+  # New Blockchain Service
+  blockchain-service:
+    build: ./backend/blockchain-service
+    ports:
+      - "8085:8085"
+    depends_on:
+      - eureka-server
+      - kafka
+      - ganache
+      - ipfs
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      WEB3J_CLIENT_ADDRESS: http://ganache:8545
+      IPFS_API_ADDRESS: /ip4/ipfs/tcp/5001
+      IPFS_GATEWAY_URL: http://ipfs:8080/ipfs/
+
   gateway-service:
     build: ./backend/gateway-service
     ports:
@@ -94,3 +140,4 @@ services:
 
 volumes:
   postgres_data:
+  ipfs_data:
