@@ -54,19 +54,19 @@ services:
     ports:
       - "8545:8545"
     command: >
-      --defaultBalance 1000
-      --gasLimit 10000000
-      --gasPrice 20000000000
-      --hardfork istanbul
-      --wallet.seed web3social
+      --wallet.defaultBalance 1000
+      --miner.blockGasLimit 10000000
+      --miner.defaultGasPrice 20000000000
+      --chain.hardfork istanbul
+      --wallet.mnemonic "test test test test test test test test test test test junk"
       --chain.chainId 1337
       --chain.networkId 1337
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8545 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      test: ["CMD-SHELL", "node -e \"const req=require('http').request({hostname:'localhost',port:8545,method:'POST',headers:{'Content-Type':'application/json'}},(r)=>{process.exit(r.statusCode===200?0:1)});req.on('error',()=>process.exit(1));req.write(JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1}));req.end();\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
     networks:
       - w3social-network
 
@@ -305,6 +305,25 @@ services:
       start_period: 10s
     networks:
       - w3social-network
+
+  # Temporary service for deploying contracts
+  # Run with: docker-compose run --rm ganache-deploy
+  ganache-deploy:
+    build:
+      context: ./blockchain
+      dockerfile: Dockerfile.deploy
+    container_name: w3social-ganache-deploy
+    depends_on:
+      - ganache
+    environment:
+      PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      GANACHE_URL: "http://ganache:8545"
+      ALCHEMY_SEPOLIA_URL: ""
+      ETHERSCAN_API_KEY: ""
+    networks:
+      - w3social-network
+    profiles:
+      - deploy
 
 # ==================== VOLUMES ====================
 volumes:

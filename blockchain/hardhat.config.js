@@ -1,6 +1,9 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
+// Standard test mnemonic (compatible with Hardhat and Ganache)
+const MNEMONIC = process.env.GANACHE_MNEMONIC || "test test test test test test test test test test test junk";
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
@@ -17,8 +20,16 @@ module.exports = {
       chainId: 31337
     },
     localhost: {
-      url: "http://127.0.0.1:8545",
-      chainId: 31337
+      // Try Docker hostname first, fallback to localhost
+      url: process.env.GANACHE_URL || "http://localhost:8545",
+      chainId: 1337,
+      // Derive accounts from Ganache seed phrase
+      accounts: {
+        mnemonic: MNEMONIC,
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 10
+      }
     },
     sepolia: {
       url: process.env.ALCHEMY_SEPOLIA_URL || "https://eth-sepolia.g.alchemy.com/v2/demo",

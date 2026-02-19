@@ -28,11 +28,8 @@ async function main() {
   const platformAddress = await platform.getAddress();
   console.log("✅ W3SocialPlatform deployed to:", platformAddress);
 
-  // Set token address in platform
-  console.log("\n🔗 Connecting token with platform...");
-  const setTokenTx = await token.setTokenAddress(platformAddress);
-  await setTokenTx.wait();
-  console.log("✅ Token and platform connected");
+  // Set token address in platform (platform already has tokenAddress from constructor)
+  console.log("\n🔗 Token and platform connected via constructor");
 
   // Verify contracts (only for testnet/mainnet)
   if (hre.network.name !== "hardhat" && hre.network.name !== "localhost") {

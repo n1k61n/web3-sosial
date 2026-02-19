@@ -34,9 +34,8 @@ docker-compose build
 # 4. Servisləri işə salın
 docker-compose up -d
 
-# 5. Smart contract-ləri deploy edin
-cd blockchain
-npm run deploy:local
+# 5. Smart contract-ləri deploy edin (opsional)
+deploy-contracts.bat
 ```
 
 ---
@@ -52,10 +51,8 @@ chmod +x start.sh
 docker-compose build
 docker-compose up -d
 
-cd blockchain
-npm install
-npm run compile
-npm run deploy:local
+# Smart contract-ləri deploy etmək üçün:
+docker-compose run --rm ganache-deploy
 ```
 
 ---

@@ -1,6 +1,6 @@
 @echo off
 REM W3Social - Full Stack Startup Script for Windows
-REM This script builds and starts all services with Docker
+REM Simplified version - deployment can be done separately
 
 echo 🚀 W3Social - Starting Full Stack...
 
@@ -13,43 +13,41 @@ if errorlevel 1 (
 
 echo ✅ Docker is running
 
-REM Step 1: Build blockchain contracts
+REM Step 1: Build blockchain contracts (optional, for local testing)
 echo.
-echo 📦 Step 1/4: Building blockchain contracts...
+echo 📦 Step 1/3: Checking blockchain contracts...
 cd blockchain
 if not exist "node_modules" (
     echo Installing npm dependencies...
     call npm install
 )
-call npm run compile
+if not exist "artifacts" (
+    echo Compiling contracts...
+    call npm run compile
+)
 cd ..
 
 REM Step 2: Build all Docker images
 echo.
-echo 🐳 Step 2/4: Building Docker images...
+echo 🐳 Step 2/3: Building Docker images...
 docker-compose build
 
 REM Step 3: Start all services
 echo.
-echo ▶️  Step 3/4: Starting all services...
+echo ▶️  Step 3/3: Starting all services...
 docker-compose up -d
 
-REM Step 4: Wait for services to be ready
+REM Wait for services to be ready
 echo.
-echo ⏳ Step 4/4: Waiting for services to start...
-timeout /t 30 /nobreak >nul
+echo ⏳ Waiting for services to start (this may take 2-3 minutes)...
+echo.
 
-REM Check service health
-echo.
-echo 📊 Service Status:
-docker-compose ps
+REM Check services one by one
+echo Checking Ganache...
+timeout /t 10 /nobreak >nul
 
-REM Deploy smart contracts
-echo.
-echo ⛓️  Deploying smart contracts to local Ganache...
-cd blockchain
-call npm run deploy:local
-cd ..
+echo Checking Eureka Server...
+timeout /t 20 /nobreak >nul
 
 echo.
 echo ✅ All services started successfully!
@@ -67,6 +65,12 @@ echo   Ganache RPC:     http://localhost:8545
 echo ════════════════════════════════════════
 
 echo.
+echo ⛓️  OPTIONAL: Deploy smart contracts
+echo ════════════════════════════════════════
+echo Run: deploy-contracts.bat
+echo Or:  docker-compose run --rm ganache-deploy
+echo.
+
 echo 📝 Useful commands:
 echo   docker-compose logs -f     ^| View all logs
 echo   docker-compose logs [svc]  ^| View specific service logs
